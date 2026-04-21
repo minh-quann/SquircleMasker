@@ -3,7 +3,7 @@ import subprocess
 import base64
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, GLib
+from gi.repository import Gtk, GLib, GdkPixbuf
 from threading import Thread
 
 from .config import THEME_DIR, SVG_TEMPLATE_DYNAMIC
@@ -51,6 +51,7 @@ class SquircleApp(Gtk.Window):
         self.state_model = Gtk.ListStore(str)
         self.state_model.append([t("opt_theme")])
         self.state_model.append([t("opt_masked")])
+        self.state_model.append([t("opt_cropped")])
         self.state_model.append([t("opt_original")])
         
         # ListStore: State(str), AppName(str), IconName(str), OriginalPath(str)
@@ -89,14 +90,23 @@ class SquircleApp(Gtk.Window):
         scroll.add(treeview)
         vbox.pack_start(scroll, True, True, 0)
         
+        # Status bar with spinner
+        status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        status_box.set_halign(Gtk.Align.CENTER)
+        
+        self.spinner = Gtk.Spinner()
+        status_box.pack_start(self.spinner, False, False, 0)
+        
         self.status_label = Gtk.Label(label=t("loading"))
-        vbox.pack_start(self.status_label, False, False, 0)
+        status_box.pack_start(self.status_label, False, False, 0)
+        
+        vbox.pack_start(status_box, False, False, 0)
         
         self.load_apps()
         
     def render_combo_text(self, column, cell, model, iter, data):
         state_id = model[iter][0]
-        text_map = {"theme": t("opt_theme"), "masked": t("opt_masked"), "original": t("opt_original")}
+        text_map = {"theme": t("opt_theme"), "masked": t("opt_masked"), "cropped": t("opt_cropped"), "original": t("opt_original")}
         cell.set_property("text", text_map.get(state_id, state_id))
 
     def filter_func(self, model, iter, data):
@@ -131,6 +141,8 @@ class SquircleApp(Gtk.Window):
         if os.path.exists(out_path):
             with open(out_path, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read(100)
+                if "<!-- SquircleMaskerCropped" in content:
+                    return "cropped"
                 if "<!-- SquircleMasker" in content:
                     return "masked"
             return "theme"
@@ -174,7 +186,7 @@ class SquircleApp(Gtk.Window):
         self.status_label.set_text(t("loaded", count=len(self.liststore)))
 
     def on_combo_changed(self, widget, path, text):
-        text_to_id = {t("opt_theme"): "theme", t("opt_masked"): "masked", t("opt_original"): "original"}
+        text_to_id = {t("opt_theme"): "theme", t("opt_masked"): "masked", "cropped": "cropped", t("opt_cropped"): "cropped", t("opt_original"): "original"}
         new_state = text_to_id.get(text)
         if not new_state: return
         
@@ -186,6 +198,7 @@ class SquircleApp(Gtk.Window):
         
         self.liststore[real_iter][0] = new_state
         self.status_label.set_text(t("processing", app=app_name))
+        self.spinner.start()
         
         thread = Thread(target=self.process_mask, args=(icon_name, new_state, real_iter))
         thread.daemon = True
@@ -267,13 +280,69 @@ class SquircleApp(Gtk.Window):
                 GLib.idle_add(self.revert_combo, real_iter, "theme")
                 return
 
-        subprocess.run("gtk-update-icon-cache ~/.local/share/icons/MacTahoe-dark/ 2>/dev/null", shell=True)
+        elif state == "cropped":
+            backup_theme_icon()
+            orig_path = find_original_icon(icon_name)
+            if not orig_path:
+                GLib.idle_add(self.update_status, t("err_not_found", icon=icon_name))
+                GLib.idle_add(self.revert_combo, real_iter, "theme")
+                return
+                
+            cmd = [
+                "magick", orig_path, "-background", "none", "-resize", "128x128!",
+                "(", "-size", "128x128", "xc:none", "-fill", "white", "-draw", "circle 64,64 64,0", ")",
+                "-compose", "DstIn", "-composite", "png:-"
+            ]
+            try:
+                # Execute magick to crop icon into circle shape
+                png_data = subprocess.check_output(cmd, stderr=subprocess.DEVNULL)
+                b64 = base64.b64encode(png_data).decode('utf-8')
+                
+                color_top, color_bot = get_smart_colors(png_data)
+                    
+                svg_content = f"""<!-- SquircleMaskerCropped -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="128" height="128">
+  <defs>
+    <linearGradient id="bg" x1="64" x2="64" y1="0" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="{color_top}"/>
+      <stop offset="1" stop-color="{color_bot}"/>
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="64" fill="url(#bg)"/>
+  <image xlink:href="data:image/png;base64,{b64}" width="96" height="96" x="16" y="16" preserveAspectRatio="xMidYMid meet"/>
+</svg>"""
+                    
+                if os.path.exists(out_path):
+                    os.remove(out_path)
+                with open(out_path, "w") as f:
+                    f.write(svg_content)
+                GLib.idle_add(self.update_status, t("mask_cropped", icon=icon_name))
+            except Exception as e:
+                GLib.idle_add(self.update_status, t("err_convert", icon=icon_name))
+                GLib.idle_add(self.revert_combo, real_iter, "theme")
+                return
+
+        # Refresh GNOME icon cache
+        GLib.idle_add(self.update_status, t("refreshing_cache"))
+        subprocess.run("gtk-update-icon-cache -f -t ~/.local/share/icons/MacTahoe-dark/ 2>/dev/null", shell=True)
+        subprocess.run("touch ~/.local/share/icons", shell=True)
+        subprocess.run("touch ~/.local/share/applications", shell=True)
+        GLib.idle_add(self.on_process_done)
         
     def update_status(self, msg):
         self.status_label.set_text(msg)
+    
+    def on_process_done(self):
+        """Stop spinner and show done status after icon cache refresh."""
+        self.spinner.stop()
+        current = self.status_label.get_text()
+        # Append checkmark to current status if not already a cache message
+        if t("refreshing_cache") in current:
+            self.status_label.set_text(t("refresh_done"))
         
     def revert_combo(self, real_iter, val):
         self.liststore[real_iter][0] = val
+        self.spinner.stop()
 
 def run_gui():
     win = SquircleApp()

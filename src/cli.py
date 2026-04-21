@@ -3,10 +3,11 @@ import subprocess
 import base64
 from .config import THEME_DIR, SVG_TEMPLATE_STATIC, APPS_TO_MASK
 from .utils import find_original_icon, fix_desktop_files
+from .i18n import t
 
 def run_cli():
     if not os.path.exists(THEME_DIR):
-        print(f"Error: Theme directory not found {THEME_DIR}")
+        print(t("err_theme_not_found", theme_dir=THEME_DIR))
         return
         
     fix_desktop_files()
@@ -14,10 +15,10 @@ def run_cli():
     print("")
 
     for app, source in APPS_TO_MASK.items():
-        print(f"Masking: {app}...")
+        print(t("masking_app", app=app))
         icon_path = find_original_icon(source)
         if not icon_path or not os.path.exists(icon_path):
-            print(f"  -> Original image not found for {app}, skipping.")
+            print(t("skip_not_found", app=app))
             continue
             
         # Use ImageMagick to convert original image to transparent PNG, base64
@@ -26,7 +27,7 @@ def run_cli():
             png_data = subprocess.check_output(cmd, stderr=subprocess.DEVNULL)
             b64 = base64.b64encode(png_data).decode('utf-8')
         except Exception as e:
-            print(f"  -> Error converting image with ImageMagick, skipping.")
+            print(t("skip_err_convert", app=app))
             continue
             
         # Replace base64 in template
@@ -35,11 +36,11 @@ def run_cli():
         
         with open(out_path, "w") as f:
             f.write(svg_content)
-        print(f"  -> Successfully created: {app}.svg")
+        print(t("success_create", app=app))
         
-    print("\\nReloading icon cache...")
+    print(t("reloading_cache"))
     subprocess.run("gtk-update-icon-cache ~/.local/share/icons/MacTahoe-dark/ 2>/dev/null", shell=True)
-    print("Done! Please press Alt+F2, type 'r' and Enter (if on X11) or restart your machine to see changes.")
+    print(t("done_msg"))
 
 if __name__ == "__main__":
     run_cli()

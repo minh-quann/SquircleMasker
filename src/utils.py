@@ -8,6 +8,7 @@ except ImportError:
     pass
 
 from .config import APPS_TO_MASK
+from .i18n import t
 
 def get_smart_colors(png_data):
     try:
@@ -99,7 +100,7 @@ def find_original_icon(icon_name):
     return None
 
 def fix_desktop_files():
-    print("Fixing .desktop files with absolute paths...")
+    print(t("fixing_desktop"))
     desktop_dir = os.path.expanduser("~/.local/share/applications")
     if not os.path.exists(desktop_dir):
         return
@@ -120,6 +121,6 @@ def fix_desktop_files():
             if modified:
                 with open(path, "w", encoding="utf-8") as file:
                     file.write(content)
-                print(f" -> Fixed Icon in {f}")
+                print(t("fixed_icon", file=f))
         except Exception as e:
             print(f" -> Error processing {f}: {e}")

@@ -16,7 +16,8 @@ SVG_TEMPLATE_STATIC = """<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="ht
 </svg>"""
 
 # Dynamic SVG template (Gradient depends on image) - Used by GUI
-SVG_TEMPLATE_DYNAMIC = """<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="64" height="64">
+SVG_TEMPLATE_DYNAMIC = """<!-- SquircleMasker -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="64" height="64">
   <defs>
     <linearGradient id="bg" x1="32" x2="32" y1="4" y2="60" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="{color_top}"/>

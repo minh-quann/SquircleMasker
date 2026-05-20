@@ -1,6 +1,7 @@
 import os
 import subprocess
 import io
+import json
 from collections import Counter
 try:
     from PIL import Image
@@ -9,6 +10,44 @@ except ImportError:
 
 from .config import APPS_TO_MASK
 from .i18n import t
+
+CUSTOM_PATHS_FILE = os.path.expanduser("~/.config/squircle_masker_custom_paths.json")
+
+def get_custom_icon_path(icon_name):
+    """
+    Get the custom icon path for a given application icon name.
+    """
+    if os.path.exists(CUSTOM_PATHS_FILE):
+        try:
+            with open(CUSTOM_PATHS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f).get(icon_name)
+        except Exception:
+            pass
+    return None
+
+def set_custom_icon_path(icon_name, path):
+    """
+    Set or delete the custom icon path for a given application icon name.
+    """
+    data = {}
+    if os.path.exists(CUSTOM_PATHS_FILE):
+        try:
+            with open(CUSTOM_PATHS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            pass
+            
+    if path is None:
+        data.pop(icon_name, None)
+    else:
+        data[icon_name] = path
+        
+    try:
+        os.makedirs(os.path.dirname(CUSTOM_PATHS_FILE), exist_ok=True)
+        with open(CUSTOM_PATHS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
+    except Exception:
+        pass
 
 def get_smart_colors(png_data):
     try:

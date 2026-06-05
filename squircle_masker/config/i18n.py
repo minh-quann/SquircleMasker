@@ -1,9 +1,10 @@
-import os
+"""Internationalization module with English and Vietnamese locale support."""
 
 import os
 import json
 
 CONFIG_FILE = os.path.expanduser("~/.config/squircle_masker_lang.json")
+
 
 def get_saved_lang():
     if os.path.exists(CONFIG_FILE):
@@ -14,6 +15,7 @@ def get_saved_lang():
             pass
     return None
 
+
 def set_lang(lang_code):
     global CURRENT_LANG
     CURRENT_LANG = lang_code
@@ -23,13 +25,14 @@ def set_lang(lang_code):
     except Exception:
         pass
 
+
 # Detect system language or default to English
 _sys_lang = os.environ.get('LANG', 'en').split('_')[0]
 CURRENT_LANG = get_saved_lang() or (_sys_lang if _sys_lang in ['en', 'vi'] else 'en')
 
 LOCALES = {
     "en": {
-        "title": "Squircle Icon Masker v1.1",
+        "title": "Squircle Icon Masker v1.3.0",
         "description": "Select applications to mask (Squircle)\\nEnable (Check) = macOS frame | Disable = Original icon",
         "mask_col": "Mask",
         "icon_col": "Icon",
@@ -69,10 +72,15 @@ LOCALES = {
         "reloading_cache": "\nReloading icon cache...",
         "refreshing_cache": "Refreshing icon cache...",
         "refresh_done": "Done! Cache refreshed.",
-        "done_msg": "Done! Please press Alt+F2, type 'r' and Enter (if on X11) or restart your machine to see changes."
+        "done_msg": "Done! Please press Alt+F2, type 'r' and Enter (if on X11) or restart your machine to see changes.",
+        "select_all": "Select All",
+        "deselect_all": "Deselect All",
+        "apply_selected": "Apply to Selected:",
+        "apply": "Apply",
+        "batch_processing": "Batch processing {count} apps..."
     },
     "vi": {
-        "title": "Squircle Icon Masker v1.2.1",
+        "title": "Squircle Icon Masker v1.3.0",
         "description": "Chọn ứng dụng để bọc viền (Squircle)\nBật (Tích) = Bọc khung macOS | Tắt = Trả về icon gốc",
         "mask_col": "Bọc khung",
         "icon_col": "Icon",
@@ -112,9 +120,15 @@ LOCALES = {
         "reloading_cache": "\nĐang tải lại icon cache...",
         "refreshing_cache": "Đang tải lại icon cache...",
         "refresh_done": "Hoàn tất! Đã tải lại cache.",
-        "done_msg": "Hoàn tất! Vui lòng nhấn Alt+F2, gõ 'r' và Enter (nếu dùng X11) hoặc khởi động lại máy để thấy sự thay đổi."
+        "done_msg": "Hoàn tất! Vui lòng nhấn Alt+F2, gõ 'r' và Enter (nếu dùng X11) hoặc khởi động lại máy để thấy sự thay đổi.",
+        "select_all": "Chọn tất cả",
+        "deselect_all": "Bỏ chọn tất cả",
+        "apply_selected": "Áp dụng cho mục đã chọn:",
+        "apply": "Áp dụng",
+        "batch_processing": "Đang xử lý hàng loạt {count} ứng dụng..."
     }
 }
+
 
 def t(key, **kwargs):
     # Use English as fallback if language is not supported

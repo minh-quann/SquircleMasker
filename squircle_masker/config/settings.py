@@ -1,3 +1,5 @@
+"""Configuration constants: theme directory, SVG templates, and app list."""
+
 import os
 
 # Current theme icon directory
@@ -33,8 +35,8 @@ APPS_TO_MASK = {
     # Flatpak apps or regular apps missing from the theme
     "com.usebottles.bottles": "com.usebottles.bottles",
     "rquickshare": "rquickshare",
-    "net.cozic.RQuickShare": "net.cozic.RQuickShare", # RQuickShare name can be one of these two
-    
+    "net.cozic.RQuickShare": "net.cozic.RQuickShare",
+
     # Custom shortcut apps
     "coccoc-browser": "coccoc-browser",
     "com.coccoc.Browser": "coccoc-browser",

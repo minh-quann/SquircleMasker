@@ -2,7 +2,7 @@
 """
 Launcher script for SquircleMasker GUI
 """
-from src.gui import run_gui
+from squircle_masker.gui import run_gui
 
 if __name__ == "__main__":
     run_gui()

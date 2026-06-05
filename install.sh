@@ -17,7 +17,7 @@ mkdir -p "$BIN_DIR"
 mkdir -p "$DESKTOP_DIR"
 
 # 2. Copy source code to user system directory
-cp -r src SquircleMasker.py mask_icons.py "$APP_DIR/"
+cp -r squircle_masker SquircleMasker.py mask_icons.py "$APP_DIR/"
 chmod +x "$APP_DIR/SquircleMasker.py"
 chmod +x "$APP_DIR/mask_icons.py"
 

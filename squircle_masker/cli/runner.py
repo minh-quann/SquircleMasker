@@ -6,6 +6,7 @@ import base64
 
 from ..config.settings import THEME_DIR, SVG_TEMPLATE_STATIC, APPS_TO_MASK
 from ..core.resolver import find_original_icon, fix_desktop_files
+from ..core.sync import sync_all_theme_icons, refresh_icon_cache
 from ..config.i18n import t
 
 
@@ -37,14 +38,11 @@ def run_cli():
 
         # Replace base64 in template
         svg_content = SVG_TEMPLATE_STATIC.replace("{b64}", b64)
-        out_path = os.path.join(THEME_DIR, f"{app}.svg")
-
-        with open(out_path, "w") as f:
-            f.write(svg_content)
+        sync_all_theme_icons(app, "masked", svg_content=svg_content)
         print(t("success_create", app=app))
 
     print(t("reloading_cache"))
-    subprocess.run("gtk-update-icon-cache ~/.local/share/icons/MacTahoe-dark/ 2>/dev/null", shell=True)
+    refresh_icon_cache()
     print(t("done_msg"))
 
 

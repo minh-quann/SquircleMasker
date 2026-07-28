@@ -5,19 +5,37 @@ import subprocess
 import time
 
 
-def sync_all_theme_icons(icon_name, state, svg_content=None, orig_path=None):
+def sync_all_theme_icons(icon_name, state, svg_content=None, orig_path=None, visited=None):
     """
-    Sync icon changes across MacTahoe and MacTahoe-dark theme directories.
+    Sync icon changes across MacTahoe, MacTahoe-dark, and hicolor theme directories.
     Handles backup, restore, and symlink creation for all theme subdirectories.
     """
+    if visited is None:
+        visited = set()
+    if icon_name in visited:
+        return
+    visited.add(icon_name)
     base_dirs = [
         os.path.expanduser("~/.local/share/icons/MacTahoe"),
-        os.path.expanduser("~/.local/share/icons/MacTahoe-dark")
+        os.path.expanduser("~/.local/share/icons/MacTahoe-dark"),
+        os.path.expanduser("~/.local/share/icons/hicolor")
     ]
     scalable_paths = {
         "light": os.path.expanduser(f"~/.local/share/icons/MacTahoe/apps/scalable/{icon_name}.svg"),
-        "dark": os.path.expanduser(f"~/.local/share/icons/MacTahoe-dark/apps/scalable/{icon_name}.svg")
+        "dark": os.path.expanduser(f"~/.local/share/icons/MacTahoe-dark/apps/scalable/{icon_name}.svg"),
+        "hicolor": os.path.expanduser(f"~/.local/share/icons/hicolor/scalable/apps/{icon_name}.svg")
     }
+
+    # Alias mapping for apps with multiple icon names (e.g. coccoc-browser and com.coccoc.Browser)
+    aliases = []
+    if icon_name == "coccoc-browser":
+        aliases = ["com.coccoc.Browser"]
+    elif icon_name == "com.coccoc.Browser":
+        aliases = ["coccoc-browser"]
+    elif icon_name == "rquickshare":
+        aliases = ["net.cozic.RQuickShare"]
+    elif icon_name == "net.cozic.RQuickShare":
+        aliases = ["rquickshare"]
 
     # 1. Backup scalable files if they are the original theme files
     for key, p in scalable_paths.items():
@@ -50,14 +68,14 @@ def sync_all_theme_icons(icon_name, state, svg_content=None, orig_path=None):
                 os.rename(bak_p, p)
     elif state == "original" and orig_path:
         for key, p in scalable_paths.items():
-            if os.path.exists(p):
+            if os.path.lexists(p):
                 os.remove(p)
             os.makedirs(os.path.dirname(p), exist_ok=True)
             os.symlink(orig_path, p)
     else:  # custom, masked, cropped
         if svg_content:
             for key, p in scalable_paths.items():
-                if os.path.exists(p):
+                if os.path.lexists(p):
                     os.remove(p)
                 os.makedirs(os.path.dirname(p), exist_ok=True)
                 with open(p, "w") as f:
@@ -69,9 +87,11 @@ def sync_all_theme_icons(icon_name, state, svg_content=None, orig_path=None):
             continue
         is_dark = "dark" in base_dir.lower()
         target_scalable = scalable_paths["dark"] if is_dark else scalable_paths["light"]
+        if "hicolor" in base_dir:
+            target_scalable = scalable_paths["hicolor"]
 
         for root, dirs, files in os.walk(base_dir):
-            if "apps/scalable" in root:
+            if "scalable" in root:
                 continue
             for file in files:
                 if file in (f"{icon_name}.svg", f"{icon_name}.png"):
@@ -107,7 +127,7 @@ def sync_all_theme_icons(icon_name, state, svg_content=None, orig_path=None):
                             if not is_masked and not os.path.exists(bak_path):
                                 os.rename(full_path, bak_path)
 
-                        if os.path.exists(full_path):
+                        if os.path.lexists(full_path):
                             os.remove(full_path)
                         try:
                             # Create absolute symlink pointing to the corresponding scalable SVG
@@ -115,11 +135,16 @@ def sync_all_theme_icons(icon_name, state, svg_content=None, orig_path=None):
                         except Exception:
                             pass
 
+    # Sync aliases if present
+    for alias in aliases:
+        sync_all_theme_icons(alias, state, svg_content=svg_content, orig_path=orig_path, visited=visited)
+
 
 def refresh_icon_cache():
     """Refresh GTK icon cache and toggle Dash-to-Dock extension for immediate visual update."""
     subprocess.run("gtk-update-icon-cache -f -t ~/.local/share/icons/MacTahoe-dark/ 2>/dev/null", shell=True)
     subprocess.run("gtk-update-icon-cache -f -t ~/.local/share/icons/MacTahoe/ 2>/dev/null", shell=True)
+    subprocess.run("gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor/ 2>/dev/null", shell=True)
     subprocess.run("touch ~/.local/share/icons", shell=True)
     subprocess.run("touch ~/.local/share/applications", shell=True)
     subprocess.run("update-desktop-database ~/.local/share/applications/ 2>/dev/null", shell=True)

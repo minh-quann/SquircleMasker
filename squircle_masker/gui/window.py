@@ -80,6 +80,8 @@ class SquircleApp(Gtk.Window):
 
         treeview = Gtk.TreeView(model=self.filter)
         treeview.set_enable_search(False)  # Disable default GTK treeview search to prevent popup bugs
+        treeview.connect("row-activated", self.on_row_activated)
+        self.treeview = treeview
 
         # Checkbox Column
         renderer_toggle = Gtk.CellRendererToggle()
@@ -144,12 +146,21 @@ class SquircleApp(Gtk.Window):
         self.batch_combo.append("masked", t("opt_masked"))
         self.batch_combo.append("cropped", t("opt_cropped"))
         self.batch_combo.append("original", t("opt_original"))
+        self.batch_combo.append("custom", t("opt_custom"))
         self.batch_combo.set_active(0)
         action_box.pack_start(self.batch_combo, False, False, 0)
 
         btn_apply = Gtk.Button(label=t("apply"))
         btn_apply.connect("clicked", self.on_batch_apply)
         action_box.pack_start(btn_apply, False, False, 0)
+
+        btn_upload = Gtk.Button(label=t("upload_custom_icon"))
+        btn_upload.connect("clicked", self.on_upload_custom_clicked)
+        action_box.pack_start(btn_upload, False, False, 0)
+
+        btn_change_bg = Gtk.Button(label=t("change_bg"))
+        btn_change_bg.connect("clicked", self.on_change_bg_clicked)
+        action_box.pack_start(btn_change_bg, False, False, 0)
 
         vbox.pack_start(action_box, False, False, 0)
 
@@ -182,23 +193,18 @@ class SquircleApp(Gtk.Window):
         cell.set_property("text", text_map.get(state_id, state_id))
 
     def render_bg_combo(self, column, cell, model, iter, data):
-        """Render the background mode combo cell - only editable when state is custom."""
-        state = model[iter][0]
-        is_custom = (state == "custom")
-        cell.set_property("editable", is_custom)
-        cell.set_property("sensitive", is_custom)
+        """Render the background mode combo cell - editable for all icon states."""
+        cell.set_property("editable", True)
+        cell.set_property("sensitive", True)
 
-        if is_custom:
-            bg_mode = model[iter][5]
-            bg_text_map = {
-                "white": t("bg_white"),
-                "gray": t("bg_gray"),
-                "custom_color": t("bg_custom_color"),
-                "auto": t("bg_auto"),
-            }
-            cell.set_property("text", bg_text_map.get(bg_mode, t("bg_white")))
-        else:
-            cell.set_property("text", "")
+        bg_mode = model[iter][5] or "white"
+        bg_text_map = {
+            "white": t("bg_white"),
+            "gray": t("bg_gray"),
+            "custom_color": t("bg_custom_color"),
+            "auto": t("bg_auto"),
+        }
+        cell.set_property("text", bg_text_map.get(bg_mode, t("bg_white")))
 
     # ── Checkbox & Batch Handlers ───────────────────────────────────
 
@@ -218,6 +224,198 @@ class SquircleApp(Gtk.Window):
         for row in self.liststore:
             row[7] = False
 
+    def on_row_activated(self, treeview, path, column):
+        """Handle double click on a row to upload/change custom icon image."""
+        filter_iter = self.filter.get_iter(path)
+        real_iter = self.filter.convert_iter_to_child_iter(filter_iter)
+        app_name = self.liststore[real_iter][1]
+        icon_name = self.liststore[real_iter][2]
+        old_state = self.liststore[real_iter][0]
+        self._handle_custom_icon_selection(real_iter, app_name, icon_name, old_state)
+
+    def on_upload_custom_clicked(self, widget):
+        """Upload custom icon for checked apps or currently selected row."""
+        selected_iters = [self.liststore.get_iter(i) for i, row in enumerate(self.liststore) if row[7]]
+        if not selected_iters:
+            selection = self.treeview.get_selection()
+            model, filter_iter = selection.get_selected()
+            if filter_iter:
+                real_iter = self.filter.convert_iter_to_child_iter(filter_iter)
+                selected_iters = [real_iter]
+
+        if not selected_iters:
+            return
+
+        self._handle_batch_custom_icon_selection(selected_iters)
+
+    def on_change_bg_clicked(self, widget):
+        """Open background mode dialog to change background for checked rows or selected row."""
+        selected_iters = [self.liststore.get_iter(i) for i, row in enumerate(self.liststore) if row[7]]
+        if not selected_iters:
+            selection = self.treeview.get_selection()
+            model, filter_iter = selection.get_selected()
+            if filter_iter:
+                real_iter = self.filter.convert_iter_to_child_iter(filter_iter)
+                selected_iters = [real_iter]
+
+        if not selected_iters:
+            return
+
+        self._show_change_bg_dialog(selected_iters)
+
+    def _show_change_bg_dialog(self, selected_iters):
+        """Show background mode radio dialog & optional color chooser, then apply background."""
+        bg_dialog = Gtk.Dialog(
+            title=t("select_bg_mode"),
+            parent=self,
+            flags=Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT,
+        )
+        bg_dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
+        bg_dialog.set_default_size(300, -1)
+
+        content_area = bg_dialog.get_content_area()
+        content_area.set_spacing(8)
+        content_area.set_margin_start(12)
+        content_area.set_margin_end(12)
+        content_area.set_margin_top(12)
+        content_area.set_margin_bottom(12)
+
+        bg_modes = [
+            ("white", t("bg_white")),
+            ("gray", t("bg_gray")),
+            ("custom_color", t("bg_custom_color")),
+            ("auto", t("bg_auto")),
+        ]
+
+        radios = []
+        group = None
+        for mode_id, mode_label in bg_modes:
+            if group is None:
+                radio = Gtk.RadioButton.new_with_label(None, mode_label)
+                group = radio
+            else:
+                radio = Gtk.RadioButton.new_with_label_from_widget(group, mode_label)
+            radio._mode_id = mode_id
+            radios.append(radio)
+            content_area.pack_start(radio, False, False, 0)
+
+        radios[0].set_active(True)
+        bg_dialog.add_button(Gtk.STOCK_OK, Gtk.ResponseType.OK)
+        bg_dialog.show_all()
+
+        bg_response = bg_dialog.run()
+        if bg_response != Gtk.ResponseType.OK:
+            bg_dialog.destroy()
+            return
+
+        selected_bg_mode = "white"
+        for radio in radios:
+            if radio.get_active():
+                selected_bg_mode = radio._mode_id
+                break
+        bg_dialog.destroy()
+
+        custom_color = None
+        if selected_bg_mode == "custom_color":
+            color_dialog = Gtk.ColorChooserDialog(
+                title=t("select_color"),
+                parent=self
+            )
+            color_response = color_dialog.run()
+            if color_response == Gtk.ResponseType.OK:
+                rgba = color_dialog.get_rgba()
+                custom_color = "#{:02x}{:02x}{:02x}".format(
+                    int(rgba.red * 255),
+                    int(rgba.green * 255),
+                    int(rgba.blue * 255)
+                )
+            else:
+                color_dialog.destroy()
+                return
+            color_dialog.destroy()
+
+        self.status_label.set_text(t("batch_processing", count=len(selected_iters)))
+        self.spinner.start()
+
+        thread = Thread(
+            target=self._apply_bg_change_batch,
+            args=(selected_iters, selected_bg_mode, custom_color)
+        )
+        thread.daemon = True
+        thread.start()
+
+    def _apply_bg_change_batch(self, selected_iters, bg_mode, custom_color):
+        """Background thread: apply background mode change to selected icons."""
+        for real_iter in selected_iters:
+            icon_name = self.liststore[real_iter][2]
+            app_name = self.liststore[real_iter][1]
+            state = self.liststore[real_iter][0]
+
+            target_state = state if state in ("custom", "masked", "cropped") else "custom"
+
+            GLib.idle_add(self.update_status, f"{app_name}...")
+            GLib.idle_add(self._update_bg_liststore_state, real_iter, target_state, bg_mode, custom_color)
+            self._process_single_icon(
+                icon_name, target_state, real_iter,
+                bg_mode=bg_mode, custom_color=custom_color, skip_refresh=True
+            )
+
+        refresh_icon_cache()
+        GLib.idle_add(self._on_process_done)
+
+    def _update_bg_liststore_state(self, real_iter, target_state, bg_mode, custom_color):
+        """Update liststore state and custom background mode on main thread."""
+        icon_name = self.liststore[real_iter][2]
+        set_custom_bg_mode(icon_name, bg_mode, custom_color)
+        self.liststore[real_iter][0] = target_state
+        self.liststore[real_iter][5] = bg_mode
+        self.liststore[real_iter][6] = custom_color or ""
+
+    def _handle_batch_custom_icon_selection(self, selected_iters):
+        """Open file chooser dialog directly to select custom icon image file for batch."""
+        dialog = Gtk.FileChooserDialog(
+            title=t("select_custom_icon"),
+            parent=self,
+            action=Gtk.FileChooserAction.OPEN
+        )
+        dialog.add_buttons(
+            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_OPEN, Gtk.ResponseType.OK
+        )
+
+        filter_image = Gtk.FileFilter()
+        filter_image.set_name(t("image_files"))
+        filter_image.add_mime_type("image/png")
+        filter_image.add_mime_type("image/jpeg")
+        filter_image.add_mime_type("image/svg+xml")
+        filter_image.add_pattern("*.png")
+        filter_image.add_pattern("*.jpg")
+        filter_image.add_pattern("*.jpeg")
+        filter_image.add_pattern("*.svg")
+        dialog.add_filter(filter_image)
+
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            custom_path = dialog.get_filename()
+            dialog.destroy()
+
+            self.status_label.set_text(t("batch_processing", count=len(selected_iters)))
+            self.spinner.start()
+
+            thread = Thread(
+                target=self._process_batch,
+                args=(selected_iters, "custom"),
+                kwargs={
+                    "custom_path": custom_path,
+                    "bg_mode": "white",
+                    "custom_color": None
+                }
+            )
+            thread.daemon = True
+            thread.start()
+        else:
+            dialog.destroy()
+
     def on_batch_apply(self, widget):
         """Apply the selected masking mode to all checked rows."""
         selected_iters = []
@@ -232,6 +430,10 @@ class SquircleApp(Gtk.Window):
         if not new_state:
             return
 
+        if new_state == "custom":
+            self._handle_batch_custom_icon_selection(selected_iters)
+            return
+
         self.status_label.set_text(t("batch_processing", count=len(selected_iters)))
         self.spinner.start()
 
@@ -239,24 +441,36 @@ class SquircleApp(Gtk.Window):
         thread.daemon = True
         thread.start()
 
-    def _process_batch(self, selected_iters, new_state):
+    def _process_batch(self, selected_iters, new_state, custom_path=None, bg_mode="white", custom_color=None):
         """Background thread: process all selected icons and refresh cache once."""
         for real_iter in selected_iters:
             icon_name = self.liststore[real_iter][2]
             app_name = self.liststore[real_iter][1]
             GLib.idle_add(self.update_status, f"{app_name}...")
-            GLib.idle_add(self._update_liststore_state, real_iter, new_state)
-            self._process_single_icon(icon_name, new_state, real_iter, skip_refresh=True)
+            GLib.idle_add(self._update_liststore_state, real_iter, new_state, custom_path, bg_mode, custom_color)
+            self._process_single_icon(icon_name, new_state, real_iter, bg_mode=bg_mode, custom_color=custom_color, skip_refresh=True)
 
         refresh_icon_cache()
         GLib.idle_add(self._on_process_done)
 
-    def _update_liststore_state(self, real_iter, new_state):
+    def _update_liststore_state(self, real_iter, new_state, custom_path=None, bg_mode="white", custom_color=None):
         """Update the liststore state on the main thread."""
-        if new_state == "original":
-            icon_name = self.liststore[real_iter][2]
+        icon_name = self.liststore[real_iter][2]
+        if new_state == "custom" and custom_path:
+            set_custom_icon_path(icon_name, custom_path)
+            set_custom_bg_mode(icon_name, bg_mode, custom_color)
+            self.liststore[real_iter][3] = custom_path
+            self.liststore[real_iter][5] = bg_mode
+            self.liststore[real_iter][6] = custom_color or ""
+        else:
+            # Clear custom icon path for any state other than custom
             set_custom_icon_path(icon_name, None)
             self.liststore[real_iter][3] = ""
+            if new_state in ("masked", "cropped"):
+                set_custom_bg_mode(icon_name, bg_mode, custom_color)
+                self.liststore[real_iter][5] = bg_mode
+                self.liststore[real_iter][6] = custom_color or ""
+
         self.liststore[real_iter][0] = new_state
 
     # ── Filter & Language ───────────────────────────────────────────
@@ -361,7 +575,12 @@ class SquircleApp(Gtk.Window):
 
         for icon_id, info in sorted(apps_dict.items(), key=lambda x: x[1]['name']):
             custom_path = get_custom_icon_path(icon_id) or ""
-            pixbuf = self.load_icon_pixbuf(info["icon"])
+            out_path = os.path.join(THEME_DIR, f"{icon_id}.svg")
+            pixbuf = None
+            if os.path.exists(out_path) and not os.path.islink(out_path):
+                pixbuf = self.load_icon_pixbuf_from_file(out_path)
+            if not pixbuf:
+                pixbuf = self.load_icon_pixbuf(info["icon"])
             bg_mode, custom_color = get_custom_bg_mode(icon_id) if info["state"] == "custom" else ("white", None)
             self.liststore.append([
                 info["state"], info["name"], info["icon"], custom_path,
@@ -373,7 +592,7 @@ class SquircleApp(Gtk.Window):
     # ── Combo Change Handlers ───────────────────────────────────────
 
     def on_bg_combo_changed(self, widget, path, text):
-        """Handle background mode change from the inline combo column."""
+        """Handle background mode change from the inline combo column for any state."""
         bg_text_to_id = {
             t("bg_white"): "white",
             t("bg_gray"): "gray",
@@ -387,22 +606,19 @@ class SquircleApp(Gtk.Window):
         filter_iter = self.filter.get_iter(path)
         real_iter = self.filter.convert_iter_to_child_iter(filter_iter)
 
-        # Only allow bg changes for custom state
         state = self.liststore[real_iter][0]
-        if state != "custom":
-            return
+        # Target state: if currently theme/original, default to custom/masked
+        target_state = state if state in ("custom", "masked", "cropped") else "masked"
 
         app_name = self.liststore[real_iter][1]
         icon_name = self.liststore[real_iter][2]
 
-        # If custom_color, show color chooser
         custom_color = None
         if new_bg_mode == "custom_color":
             color_dialog = Gtk.ColorChooserDialog(
                 title=t("select_color"),
                 parent=self
             )
-            # Pre-select the previous custom color if available
             old_custom_color = self.liststore[real_iter][6]
             if old_custom_color:
                 from gi.repository import Gdk
@@ -423,20 +639,18 @@ class SquircleApp(Gtk.Window):
                 return
             color_dialog.destroy()
 
-        # Update ListStore
+        self.liststore[real_iter][0] = target_state
         self.liststore[real_iter][5] = new_bg_mode
         self.liststore[real_iter][6] = custom_color or ""
 
-        # Save bg_mode to config
         set_custom_bg_mode(icon_name, new_bg_mode, custom_color)
 
-        # Re-process the icon with the new background
         self.status_label.set_text(t("processing", app=app_name))
         self.spinner.start()
 
         thread = Thread(
             target=self._process_single_icon,
-            args=(icon_name, "custom", real_iter),
+            args=(icon_name, target_state, real_iter),
             kwargs={"bg_mode": new_bg_mode, "custom_color": custom_color}
         )
         thread.daemon = True
@@ -466,95 +680,27 @@ class SquircleApp(Gtk.Window):
         if new_state == "custom":
             self._handle_custom_icon_selection(real_iter, app_name, icon_name, old_state)
         else:
-            if new_state == "original":
-                set_custom_icon_path(icon_name, None)
-                self.liststore[real_iter][3] = ""
+            # Clear custom path when switching away from custom mode
+            set_custom_icon_path(icon_name, None)
+            self.liststore[real_iter][3] = ""
+
+            bg_mode = self.liststore[real_iter][5] or "white"
+            custom_color = self.liststore[real_iter][6] or None
 
             self.liststore[real_iter][0] = new_state
             self.status_label.set_text(t("processing", app=app_name))
             self.spinner.start()
 
-            thread = Thread(target=self._process_single_icon, args=(icon_name, new_state, real_iter))
+            thread = Thread(
+                target=self._process_single_icon,
+                args=(icon_name, new_state, real_iter),
+                kwargs={"bg_mode": bg_mode, "custom_color": custom_color}
+            )
             thread.daemon = True
             thread.start()
 
     def _handle_custom_icon_selection(self, real_iter, app_name, icon_name, old_state):
-        """Show dialogs for custom icon: background mode → color picker → file chooser."""
-        # Step 1: Show background mode selection dialog
-        bg_dialog = Gtk.Dialog(
-            title=t("select_bg_mode"),
-            parent=self,
-            flags=Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT,
-        )
-        bg_dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
-        bg_dialog.set_default_size(300, -1)
-
-        content_area = bg_dialog.get_content_area()
-        content_area.set_spacing(8)
-        content_area.set_margin_start(12)
-        content_area.set_margin_end(12)
-        content_area.set_margin_top(12)
-        content_area.set_margin_bottom(12)
-
-        # Radio buttons for background mode
-        bg_modes = [
-            ("white", t("bg_white")),
-            ("gray", t("bg_gray")),
-            ("custom_color", t("bg_custom_color")),
-            ("auto", t("bg_auto")),
-        ]
-
-        radios = []
-        group = None
-        for mode_id, mode_label in bg_modes:
-            if group is None:
-                radio = Gtk.RadioButton.new_with_label(None, mode_label)
-                group = radio
-            else:
-                radio = Gtk.RadioButton.new_with_label_from_widget(group, mode_label)
-            radio._mode_id = mode_id
-            radios.append(radio)
-            content_area.pack_start(radio, False, False, 0)
-
-        radios[0].set_active(True)
-        bg_dialog.add_button(Gtk.STOCK_OK, Gtk.ResponseType.OK)
-        bg_dialog.show_all()
-
-        bg_response = bg_dialog.run()
-        if bg_response != Gtk.ResponseType.OK:
-            bg_dialog.destroy()
-            self.liststore[real_iter][0] = old_state
-            return
-
-        selected_bg_mode = "white"
-        for radio in radios:
-            if radio.get_active():
-                selected_bg_mode = radio._mode_id
-                break
-        bg_dialog.destroy()
-
-        # Step 2: If custom_color, show color chooser
-        custom_color = None
-        if selected_bg_mode == "custom_color":
-            color_dialog = Gtk.ColorChooserDialog(
-                title=t("select_color"),
-                parent=self
-            )
-            color_response = color_dialog.run()
-            if color_response == Gtk.ResponseType.OK:
-                rgba = color_dialog.get_rgba()
-                custom_color = "#{:02x}{:02x}{:02x}".format(
-                    int(rgba.red * 255),
-                    int(rgba.green * 255),
-                    int(rgba.blue * 255)
-                )
-            else:
-                color_dialog.destroy()
-                self.liststore[real_iter][0] = old_state
-                return
-            color_dialog.destroy()
-
-        # Step 3: Open file chooser to select custom icon
+        """Open file chooser dialog directly to select custom icon image file."""
         dialog = Gtk.FileChooserDialog(
             title=t("select_custom_icon"),
             parent=self,
@@ -580,6 +726,9 @@ class SquircleApp(Gtk.Window):
         if response == Gtk.ResponseType.OK:
             custom_path = dialog.get_filename()
             dialog.destroy()
+
+            selected_bg_mode = self.liststore[real_iter][5] or "white"
+            custom_color = self.liststore[real_iter][6] or None
 
             set_custom_icon_path(icon_name, custom_path)
             self.liststore[real_iter][3] = custom_path
@@ -631,22 +780,22 @@ class SquircleApp(Gtk.Window):
                 GLib.idle_add(self.update_status, t("set_custom", icon=icon_name))
 
             elif state == "masked":
-                orig_path = get_custom_icon_path(icon_name) or find_original_icon(icon_name)
+                orig_path = find_original_icon(icon_name)
                 if not orig_path:
                     GLib.idle_add(self.update_status, t("err_not_found", icon=icon_name))
                     GLib.idle_add(self._revert_combo, real_iter, "theme", not skip_refresh)
                     return
-                svg_content = generate_masked_svg(orig_path)
+                svg_content = generate_masked_svg(orig_path, bg_mode, custom_color)
                 sync_all_theme_icons(icon_name, "masked", svg_content=svg_content)
                 GLib.idle_add(self.update_status, t("masked", icon=icon_name))
 
             elif state == "cropped":
-                orig_path = get_custom_icon_path(icon_name) or find_original_icon(icon_name)
+                orig_path = find_original_icon(icon_name)
                 if not orig_path:
                     GLib.idle_add(self.update_status, t("err_not_found", icon=icon_name))
                     GLib.idle_add(self._revert_combo, real_iter, "theme", not skip_refresh)
                     return
-                svg_content = generate_cropped_svg(orig_path)
+                svg_content = generate_cropped_svg(orig_path, bg_mode, custom_color)
                 sync_all_theme_icons(icon_name, "cropped", svg_content=svg_content)
                 GLib.idle_add(self.update_status, t("mask_cropped", icon=icon_name))
 

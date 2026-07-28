@@ -77,7 +77,9 @@ LOCALES = {
         "deselect_all": "Deselect All",
         "apply_selected": "Apply to Selected:",
         "apply": "Apply",
-        "batch_processing": "Batch processing {count} apps..."
+        "batch_processing": "Batch processing {count} apps...",
+        "upload_custom_icon": "Upload Custom Image",
+        "change_bg": "Change Background"
     },
     "vi": {
         "title": "Squircle Icon Masker v1.3.0",
@@ -125,7 +127,9 @@ LOCALES = {
         "deselect_all": "Bỏ chọn tất cả",
         "apply_selected": "Áp dụng cho mục đã chọn:",
         "apply": "Áp dụng",
-        "batch_processing": "Đang xử lý hàng loạt {count} ứng dụng..."
+        "batch_processing": "Đang xử lý hàng loạt {count} ứng dụng...",
+        "upload_custom_icon": "Tải Ảnh Icon",
+        "change_bg": "Đổi Nền Icon"
     }
 }
 

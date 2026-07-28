@@ -81,6 +81,26 @@ def sync_all_theme_icons(icon_name, state, svg_content=None, orig_path=None, vis
                 with open(p, "w") as f:
                     f.write(svg_content)
 
+            # Generate PNG files for hicolor resolutions & pixmaps for dock/desktop compatibility
+            # Generate PNG files for hicolor resolutions & pixmaps for dock/desktop compatibility
+            hicolor_svg = scalable_paths.get("hicolor")
+            if hicolor_svg and os.path.exists(hicolor_svg):
+                for size in ["512x512", "256x256", "128x128", "48x48", "32x32", "22x22"]:
+                    out_dir = os.path.expanduser(f"~/.local/share/icons/hicolor/{size}/apps")
+                    os.makedirs(out_dir, exist_ok=True)
+                    out_png = os.path.join(out_dir, f"{icon_name}.png")
+                    subprocess.run(
+                        ["magick", "-density", "300", "-background", "none", hicolor_svg, "-filter", "Lanczos", "-resize", size, out_png],
+                        stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL
+                    )
+                pix_dir = os.path.expanduser("~/.local/share/pixmaps")
+                os.makedirs(pix_dir, exist_ok=True)
+                pix_png = os.path.join(pix_dir, f"{icon_name}.png")
+                subprocess.run(
+                    ["magick", "-density", "300", "-background", "none", hicolor_svg, "-filter", "Lanczos", "-resize", "512x512", pix_png],
+                    stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL
+                )
+
     # 3. Process extra directories (apps/22, categories/32, preferences/32 etc.)
     for base_dir in base_dirs:
         if not os.path.exists(base_dir):
@@ -113,7 +133,7 @@ def sync_all_theme_icons(icon_name, state, svg_content=None, orig_path=None, vis
                         if os.path.exists(bak_path):
                             os.rename(bak_path, full_path)
                     else:
-                        # Backup and symlink to our modified scalable icon
+                        # Backup original non-link file
                         if os.path.exists(full_path) and not os.path.islink(full_path):
                             is_masked = False
                             if file.endswith(".svg"):
@@ -129,9 +149,18 @@ def sync_all_theme_icons(icon_name, state, svg_content=None, orig_path=None, vis
 
                         if os.path.lexists(full_path):
                             os.remove(full_path)
+
                         try:
-                            # Create absolute symlink pointing to the corresponding scalable SVG
-                            os.symlink(target_scalable, full_path)
+                            if file.endswith(".svg"):
+                                os.symlink(target_scalable, full_path)
+                            else:
+                                # For PNG files, render actual PNG at target resolution instead of broken SVG symlink
+                                folder_name = os.path.basename(root)
+                                target_size = folder_name if ("x" in folder_name and folder_name[0].isdigit()) else "512x512"
+                                subprocess.run(
+                                    ["magick", "-density", "300", "-background", "none", target_scalable, "-filter", "Lanczos", "-resize", target_size, full_path],
+                                    stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL
+                                )
                         except Exception:
                             pass
 
@@ -142,6 +171,9 @@ def sync_all_theme_icons(icon_name, state, svg_content=None, orig_path=None, vis
 
 def refresh_icon_cache():
     """Refresh GTK icon cache and toggle Dash-to-Dock extension for immediate visual update."""
+    from .resolver import fix_desktop_files
+    fix_desktop_files()
+
     subprocess.run("gtk-update-icon-cache -f -t ~/.local/share/icons/MacTahoe-dark/ 2>/dev/null", shell=True)
     subprocess.run("gtk-update-icon-cache -f -t ~/.local/share/icons/MacTahoe/ 2>/dev/null", shell=True)
     subprocess.run("gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor/ 2>/dev/null", shell=True)

@@ -6,7 +6,7 @@ import os
 THEME_DIR = os.path.expanduser("~/.local/share/icons/MacTahoe-dark/apps/scalable")
 
 # Standard SVG template for MacTahoe-dark (Dark gray squircle) - Used by CLI
-SVG_TEMPLATE_STATIC = """<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="64" height="64">
+SVG_TEMPLATE_STATIC = """<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="512" viewBox="0 0 64 64">
   <defs>
     <linearGradient id="bg" x1="32" x2="32" y1="4" y2="60" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#323131"/>
@@ -19,7 +19,7 @@ SVG_TEMPLATE_STATIC = """<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="ht
 
 # Dynamic SVG template (Gradient depends on image) - Used by GUI
 SVG_TEMPLATE_DYNAMIC = """<!-- SquircleMasker -->
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="64" height="64">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="512" viewBox="0 0 64 64">
   <defs>
     <linearGradient id="bg" x1="32" x2="32" y1="4" y2="60" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="{color_top}"/>
